@@ -165,30 +165,30 @@ def build_refrigerator(length, width, height, thicc, left, set_pose=None, set_ro
             <body name="obj_2_axis" pos='''+ax_x_string2+''' quat='''+axquat_string2+'''>
                     <geom size="0.1" type="sphere" material="geomHandle" />
             </body-->
-            <body name="fridgeinet_bottom" pos=''' + base_origin + ''' quat='''+base_orientation+'''>
+            <body name="cabinet_bottom" pos=''' + base_origin + ''' quat='''+base_orientation+'''>
                 <inertial pos="0 0 0" mass="1" diaginertia="1 1 1" />
                 <geom size='''+ base_size +''' type="box" material="geomObj" name="b"/>
-                <body name="fridgeinet_left" pos=''' + left_origin + '''>
+                <body name="cabinet_left" pos=''' + left_origin + '''>
                     <inertial pos="0 0 0" mass="1" diaginertia="1 1 1" />
                     <geom size=''' + side_size + ''' type="box" material="geomObj" name="c" />
                 </body>
-                <body name="fridgeinet_right" pos='''+right_origin+'''>
+                <body name="cabinet_right" pos='''+right_origin+'''>
                     <inertial pos="0 0 0" mass="1" diaginertia="1 1 1" />
                     <geom size='''+side_size+''' type="box" material="geomObj" name="d" />
                 </body>
-                <body name="fridgeinet_top" pos='''+top_origin+'''>
+                <body name="cabinet_top" pos='''+top_origin+'''>
                     <inertial pos="0 0 0" mass="1" diaginertia="1 1 1" />
                     <geom size='''+top_size+''' type="box" material="geomObj" name="e"/>
                 </body>
-                <body name="fridgeinet_shelf" pos='''+shelf_origin+'''>
+                <body name="cabinet_shelf" pos='''+shelf_origin+'''>
                     <inertial pos="0 0 0" mass="1" diaginertia="1 1 1" />
                     <geom size='''+shelf_size+''' type="box" material="geomObj" name="shelf"/>
                 </body>
-                <body name="fridgeinet_back" pos=''' + back_origin + ''' >
+                <body name="cabinet_back" pos=''' + back_origin + ''' >
                     <inertial pos="0 0 0" mass="1" diaginertia="1 1 1" />
                     <geom size='''+back_size+''' type="box" material="geomObj" name="f" />
                 </body>
-                <body name="fridgeinet_left_hinge" pos='''+hinge1_origin+'''>
+                <body name="cabinet_left_hinge" pos='''+hinge1_origin+'''>
                     <inertial pos='''+door1_origin+''' mass="1" diaginertia="1 1 1" />
                     <joint name="bottom_left_hinge" type="hinge" pos="0 0 0" axis="0 0 1" limited="true" range='''+hinge1_range+''' />
                     <geom size='''+door_size1+''' pos='''+door1_origin+''' type="box" material="geomObj" name="g"/>
@@ -197,7 +197,7 @@ def build_refrigerator(length, width, height, thicc, left, set_pose=None, set_ro
                         <geom size='''+handle_size+''' type="box" material="geomHandle" name="h"/>
                     </body>
                 </body>
-                <body name="fridgeinet_right_hinge" pos='''+hinge2_origin+'''>
+                <body name="cabinet_right_hinge" pos='''+hinge2_origin+'''>
                     <inertial pos='''+door2_origin+''' mass="1" diaginertia="1 1 1" />
                     <joint name="bottom_right_hinge" type="hinge" pos="0 0 0" axis="0 0 1" limited="true" range='''+hinge2_range+''' />
                     <geom size='''+door_size2+''' pos='''+door2_origin+''' type="box" material="geomObj" name="q"/>
@@ -215,7 +215,7 @@ def build_refrigerator(length, width, height, thicc, left, set_pose=None, set_ro
     </worldbody>
 </mujoco>'''
     fridge.xml=xml
-    return fridge
+    return fridge# , (side_width, base_width, side_height * height_fraction), (side_width, base_width, side_height * (1-height_fraction))
 
 def test():
     import cv2

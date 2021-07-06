@@ -1,5 +1,6 @@
 import os
 import math
+import random
 import numpy as np
 from PIL import Image
 
@@ -12,111 +13,78 @@ from generation.generator_pybullet import SceneGenerator
 class ArtForce(MetaEnv):
     # action_space=spaces.Box(np.array([-0.8,0,0,-math.pi,-math.pi,-math.pi]),np.array([0.8,0.8,0.8,math.pi,math.pi,math.pi]))
     # observation_space = spaces.Box(np.array([0,0,0,-math.pi/3*2]), np.array([1,1,1,0]))
-    def __init__(self, client, offset, args=[]):
-
+    obj_list = ["microwave", "toaster", "drawer", "cabinet", "cabinet2", "refrigerator"]
+    def __init__(self, client, offset, args=["microwave", True, True]):
+        assert args[0] in self.obj_list, f"[x] {args[0]} is not in obj_list, valid object is {self.obj_list}"
+        self.obj = args[0]
+        self.mean_flag = args[1]
+        self.only_left = args[2]
         super().__init__(client, offset)
 
     
     def _load_models(self):
-
-        # init table
-        # table_pos = np.array([0.0,0,-1.4]) + self.offset
-        # table_orn = np.array([0,0,0])
-        # self.init_table(table_pos, table_orn)
         
         # load dataset
-        scene = SceneGenerator(self.p, root_dir='/home/luckky/luckky/art-force/test')
+        self._load_articulated_object()
 
-        obj,_,_ = scene.sample_obj("microwave", True, True)
-        xml = obj.xml
-        fname=os.path.join(scene.savedir, 'scene.xml')
-        scene.write_urdf(fname, xml)
-        # objId = self.p.loadMJCF(fname)
-        obj_id = self._visual_object(fname)
-        self.obj_id = obj_id
+        # fix object
+        self._fix_object()
 
-        # fix object to table
-        joint_num = self.p.getNumJoints(obj_id)
-        # bottom_link_id = -1
-        bottom_link_pos = np.array(self.p.getBasePositionAndOrientation(obj_id)[0])
-        l, w = -1,-1
-        for i in range(joint_num):
-            joint_info =  self.p.getJointInfo(obj_id, i)
-            print("[*] Joint info:", joint_info)
-            if joint_info[12] == b'cabinet_left':
-                l = abs(joint_info[14][1])
-            elif joint_info[12] == b'cabinet_back':
-                w = abs(joint_info[14][0])
-        
-        assert l!=-1 and w!=-1, "Cannot find object h/w!"
-        print(f"[~] object's l: {l}, w: {w}")
-        # add box
-        self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
-        # table_list = []
-        for i in range(4):
-            cube_id = self.p.loadURDF(
-                "cube.urdf", 
-                basePosition=bottom_link_pos+np.array([w*(1 if i > 1 else -1), l*(1 if i % 2 else -1), -0.02]),
-                baseOrientation=self.p.getQuaternionFromEuler([0, 0, -math.pi]),
-                globalScaling=0.02,
-                useFixedBase=True,
-                flags=0
-            )
-            self.p.createConstraint(
-                cube_id,
-                -1,
-                obj_id,
-                -1,
-                self.p.JOINT_FIXED,
-                [0,0,1],
-                np.array([w*(1 if i > 1 else -1), l*(1 if i % 2 else -1),  0.02]),
-                [0,0,0],
-                # childFrameOrientation=[0,0,math.pi/2]
-            )
-            # print("[*] debug for offset", np.array([w*(1 if i > 1 else -1), l*(1 if i % 2 else -1),  -0.02]))
-            
+        # add gripper
+        self._add_gripper()
+        # # test
+        # print(f"[*] TEST FOR GRIPPER")
+        # joint_num = self.p.getNumJoints(self.gripper_id)
+        # for i in range(joint_num):
+        #     joint_info =  self.p.getJointInfo(self.gripper_id, i)
+        #     print("[*] Joint info:", joint_info)
 
-        
-        # assert bottom_link_id != -1, "Cannot find link \'cabinet_back\'!"
-        # print(f"[~] Find bottom link id: {bottom_link_id}")
-        # bottom_link_pos = np.array(self.p.getLinkState(obj_id, bottom_link_id)[0])
-        
-        print("[*] bottom_frame_pos:", bottom_link_pos)
-        # self.p.createConstraint(
-        #     self.table_id, 
-        #     -1, 
-        #     obj_id, 
-        #     -1, 
-        #     self.p.JOINT_FIXED,
-        #     [0,0,0],
-        #     bottom_link_pos+[0,0,1],
-        #     [0,0,0],
-        #     parentFrameOrientation=[0,0,math.pi]
-        # )
-        # self.p.createConstraint(
-        #     self.table_id, 
-        #     -1, 
-        #     obj_id, 
-        #     bottom_link_id, 
-        #     self.p.JOINT_FIXED,
-        #     [0.1,0,0],
-        #     bottom_link_pos+[0,0.1,1],
-        #     [0,0,0],
-        #     childFrameOrientation=[0,0,math.pi]
-        # )
-        print("[~] Constraint established.")
-
-        
     
     def _reset_internals(self):
-        pass
         
         # reset(random) articulated object pose
+        for i in self.axis_index:
+            angle = random.random()*(-math.pi/18) - math.pi/18
+            if self.obj == "refrigerator":
+                angle = -angle
+            self.p.resetJointState(self.obj_id, i, angle)
+            print(f"[~] axis {i} has been reset")
 
         # reset virtual tcp pose
 
-    def _visual_object(self, filename):
-        objId, _ = self.p.loadMJCF(filename)
+    def apply_action(self, action):
+        # joint_num = self.p.getNumJoints(self.obj_id)
+        # for i in range(joint_num):
+        #     joint_info =  self.p.getJointState(self.obj_id, i)
+        #     print("[*] Joint info:", i, joint_info)
+
+        # make virtual end go arc
+
+        # just test
+        # self.p.resetBaseVelocity(self.gripper_id, [0.1,0.1,0.1])
+        pass
+    
+    def get_info(self):
+        # get the prediction of the axis's pose
+        return [], 0, False, []
+
+    
+    def reset(self, hard_reset):
+        super().reset(hard_reset=hard_reset)
+
+
+    def _load_articulated_object(self):
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        scene = SceneGenerator(self.p, root_dir=f'{dir_path}/assets')
+
+        # print(f"[*] show me the self.obj: {self.obj}")
+        obj,_,_ = scene.sample_obj(self.obj, self.mean_flag, self.only_left)
+        xml = obj.xml
+        fname=os.path.join(scene.savedir, f'{self.obj}.xml')
+        scene.write_urdf(fname, xml)
+        
+        objId, _ = self.p.loadMJCF(fname)
+        self.obj_id = objId
 
         # create normal texture image
         x, y = np.meshgrid(np.linspace(-1,1, 128), np.linspace(-1,1, 128))
@@ -135,40 +103,71 @@ class ArtForce(MetaEnv):
         image_noise.save(fname2)
         textureId2 = self.p.loadTexture(fname2)
 
-
-        # apply texture to the object way: idea one
-        # planeVis = self.p.createVisualShape(shapeType=self.p.GEOM_MESH,
-        #                        fileName=filename,
-        #                        rgbaColor=[168 / 255.0, 164 / 255.0, 92 / 255.0, 1.0], 
-        #                        specularColor=[0.5, 0.5, 0.5],
-        #                        physicsClientId=pb_client)
-
-        # self.p.changeVisualShape(planeVis,
-        #                     -1,
-        #                     textureUniqueId=textureId,
-        #                     rgbaColor=[1, 1, 1, 1],
-        #                     specularColor=[1, 1, 1, 1],
-        #                     physicsClientId=pb_client)
-
         # apply texture to the object way: idea two
         # self.p.changeVisualShape(objId, -1, textureUniqueId=textureId2, rgbaColor=[1, 1, 1, 1], specularColor=[1, 1, 1, 1], physicsClientId=pb_client) #bottom 
         self.p.changeVisualShape(objId, 0, textureUniqueId=textureId2, rgbaColor=[1, 1, 1, 1], specularColor=[1, 1, 1, 1]) #left side
         self.p.changeVisualShape(objId, 1, textureUniqueId=textureId2, rgbaColor=[1, 1, 1, 1], specularColor=[1, 1, 1, 1]) #right side
         self.p.changeVisualShape(objId, 2, textureUniqueId=textureId2, rgbaColor=[1, 1, 1, 1], specularColor=[1, 1, 1, 1]) #top
-        return objId
 
+    def _fix_object(self):
+        # get object's l&w
+        joint_num = self.p.getNumJoints(self.obj_id)
+        bottom_link_pos = np.array(self.p.getBasePositionAndOrientation(self.obj_id)[0])
+        l, w = -1,-1
+        axis_index = []
+        for i in range(joint_num):
+            joint_info =  self.p.getJointInfo(self.obj_id, i)
+            # print("[*] Joint info:", joint_info)
+            if joint_info[12] == b'cabinet_left':
+                l = abs(joint_info[14][1])
+            elif joint_info[12] == b'cabinet_back':
+                w = abs(joint_info[14][0])
+            elif joint_info[1] == b'bottom_left_hinge':
+                axis_index.append(i)
+            elif self.obj in ["cabinet2", "refrigerator"] and joint_info[1] == b'bottom_right_hinge':
+                axis_index.append(i)
+        assert l!=-1 and w!=-1, "[x] Cannot find object h/w!"
+        print(f"[~] object's l: {l}, w: {w}")
+        assert axis_index, "[x] Cannot find any axis!"
+        print(f"[~] axis_index: {axis_index}")
+        self.axis_index = axis_index
+        
+        # add box to fix object
+        self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        # table_list = []
+        for i in range(4):
+            cube_id = self.p.loadURDF(
+                "cube.urdf", 
+                basePosition=bottom_link_pos+np.array([w*(1 if i > 1 else -1), l*(1 if i % 2 else -1), -0.02]),
+                baseOrientation=self.p.getQuaternionFromEuler([0, 0, -math.pi]),
+                globalScaling=0.02,
+                useFixedBase=True,
+                flags=0
+            )
+            self.p.createConstraint(
+                cube_id,
+                -1,
+                self.obj_id,
+                -1,
+                self.p.JOINT_FIXED,
+                [0,0,1],
+                np.array([w*(1 if i > 1 else -1), l*(1 if i % 2 else -1),  0.02]),
+                [0,0,0],
+                # childFrameOrientation=[0,0,math.pi/2]
+            )
+            # print("[*] debug for offset", np.array([w*(1 if i > 1 else -1), l*(1 if i % 2 else -1),  -0.02]))
+        print("[~] Constraint established.")  
 
-    def apply_action(self, action):
-        # make virtual end go arc
-        pass
-    
-    def get_info(self):
-        # get the prediction of the axis's pose
-        return [], 0, False, []
-
-    
-    def reset(self, hard_reset):
-        super().reset(hard_reset=hard_reset)
+    def _add_gripper(self):
+        self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        self.gripper_id = self.p.loadSDF(
+            f"gripper/wsg50_one_motor_gripper.sdf", 
+            # basePosition=bottom_link_pos+np.array([w*(1 if i > 1 else -1), l*(1 if i % 2 else -1), -0.02]),
+            # baseOrientation=self.p.getQuaternionFromEuler([0, 0, -math.pi]),
+            # globalScaling=0.02,
+            # useFixedBase=True,
+            # flags=0
+        )[0]
 
 
 # if __name__ == '__main__':
