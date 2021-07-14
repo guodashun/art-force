@@ -7,8 +7,10 @@ from env import ArtForce
 
 TASK_LIST['art-force'] = ArtForce
 
+object_list = ["microwave", "toaster", "drawer", "cabinet", "cabinet2", "refrigerator"]
+
 if __name__ == '__main__':
-    env = gym.make('peg-in-hole-v0', client=p.GUI, task="art-force", task_num=1, offset = [2.,3.,0.],args=["refrigerator", False, True], is_test=True)
+    env = gym.make('peg-in-hole-v0', client=p.GUI, task="art-force", task_num=1, offset = [2.,3.,0.],args=[object_list[0], False, True], is_test=True)
     env.reset()
     while True:
         env.step([[1]])

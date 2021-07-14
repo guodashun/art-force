@@ -215,7 +215,7 @@ def build_refrigerator(length, width, height, thicc, left, set_pose=None, set_ro
     </worldbody>
 </mujoco>'''
     fridge.xml=xml
-    return fridge# , (side_width, base_width, side_height * height_fraction), (side_width, base_width, side_height * (1-height_fraction))
+    return fridge# , (side_width, base_width, side_height * height_fraction), (side_width, base_width, side_height)
 
 def test():
     import cv2

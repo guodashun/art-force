@@ -1,8 +1,10 @@
 import os
 import math
 import random
+from icecream import ic
 import numpy as np
 from PIL import Image
+from scipy.spatial.transform import Rotation as R
 
 import pybullet as p
 import pybullet_data
@@ -14,11 +16,15 @@ class ArtForce(MetaEnv):
     # action_space=spaces.Box(np.array([-0.8,0,0,-math.pi,-math.pi,-math.pi]),np.array([0.8,0.8,0.8,math.pi,math.pi,math.pi]))
     # observation_space = spaces.Box(np.array([0,0,0,-math.pi/3*2]), np.array([1,1,1,0]))
     obj_list = ["microwave", "toaster", "drawer", "cabinet", "cabinet2", "refrigerator"]
-    def __init__(self, client, offset, args=["microwave", True, True]):
+    def __init__(self, client, offset, args=["microwave", True]):
         assert args[0] in self.obj_list, f"[x] {args[0]} is not in obj_list, valid object is {self.obj_list}"
         self.obj = args[0]
         self.mean_flag = args[1]
-        self.only_left = args[2]
+        # self.only_left = args[2]
+        
+        self.left_flag = -1 if self.obj == "refrigerator" else 1
+        self.radius_flag = 3/4 if self.obj == "microwave" else 1
+        
         super().__init__(client, offset)
 
     
@@ -44,13 +50,23 @@ class ArtForce(MetaEnv):
         
         # reset(random) articulated object pose
         for i in self.axis_index:
-            angle = random.random()*(-math.pi/18) - math.pi/18
-            if self.obj == "refrigerator":
-                angle = -angle
+            angle = self.left_flag * (random.random()*(-math.pi/18) - math.pi/18)
             self.p.resetJointState(self.obj_id, i, angle)
             print(f"[~] axis {i} has been reset")
 
         # reset virtual tcp pose
+        # get axis's pose
+        axis_pose = self._get_axis_pose()
+
+        # get door pose
+        door_pos_axis = np.array([0,self.obj_l*self.radius_flag,0,1])
+        door_pos_world = (axis_pose @ door_pos_axis)[:3]
+
+        # self.p.resetBasePositionAndOrientation(self.gripper_id, door_pos_world, [0,0,0,1])
+        # debug_axis = DebugAxes(self.p)
+        # debug_axis.update(door_pos_world)
+
+        
 
     def apply_action(self, action):
         # joint_num = self.p.getNumJoints(self.obj_id)
@@ -78,7 +94,7 @@ class ArtForce(MetaEnv):
         scene = SceneGenerator(self.p, root_dir=f'{dir_path}/assets')
 
         # print(f"[*] show me the self.obj: {self.obj}")
-        obj,_,_ = scene.sample_obj(self.obj, self.mean_flag, self.only_left)
+        obj,_,_ = scene.sample_obj(self.obj, self.mean_flag, True) # self.only_left
         xml = obj.xml
         fname=os.path.join(scene.savedir, f'{self.obj}.xml')
         scene.write_urdf(fname, xml)
@@ -112,22 +128,23 @@ class ArtForce(MetaEnv):
     def _fix_object(self):
         # get object's l&w
         joint_num = self.p.getNumJoints(self.obj_id)
-        bottom_link_pos = np.array(self.p.getBasePositionAndOrientation(self.obj_id)[0])
+        bottom_link_pos, bottom_link_ori = [np.array(i) for i in self.p.getBasePositionAndOrientation(self.obj_id)]
         l, w = -1,-1
         axis_index = []
         for i in range(joint_num):
             joint_info =  self.p.getJointInfo(self.obj_id, i)
             # print("[*] Joint info:", joint_info)
             if joint_info[12] == b'cabinet_left':
-                l = abs(joint_info[14][1])
+                l = abs(joint_info[14][1]) * 2
             elif joint_info[12] == b'cabinet_back':
-                w = abs(joint_info[14][0])
+                w = abs(joint_info[14][0]) * 2
             elif joint_info[1] == b'bottom_left_hinge':
                 axis_index.append(i)
             elif self.obj in ["cabinet2", "refrigerator"] and joint_info[1] == b'bottom_right_hinge':
                 axis_index.append(i)
         assert l!=-1 and w!=-1, "[x] Cannot find object h/w!"
         print(f"[~] object's l: {l}, w: {w}")
+        self.obj_l, self.obj_w = l, w
         assert axis_index, "[x] Cannot find any axis!"
         print(f"[~] axis_index: {axis_index}")
         self.axis_index = axis_index
@@ -136,14 +153,19 @@ class ArtForce(MetaEnv):
         self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
         # table_list = []
         for i in range(4):
+            offset = np.array([w*(1 if i > 1 else -1)/2, l*(1 if i % 2 else -1)/2, -0.02])
+            offset_world = R.from_quat(bottom_link_ori).as_matrix() @ offset
             cube_id = self.p.loadURDF(
                 "cube.urdf", 
-                basePosition=bottom_link_pos+np.array([w*(1 if i > 1 else -1), l*(1 if i % 2 else -1), -0.02]),
-                baseOrientation=self.p.getQuaternionFromEuler([0, 0, -math.pi]),
+                basePosition=bottom_link_pos+offset_world,
+                baseOrientation=bottom_link_ori,
                 globalScaling=0.02,
                 useFixedBase=True,
                 flags=0
             )
+            offset = np.array([w*(-1 if i > 1 else 1)/2, l*(-1 if i % 2 else 1)/2, 0.02])
+            # offset_world = R.from_quat(bottom_link_ori).as_matrix() @ offset
+
             self.p.createConstraint(
                 cube_id,
                 -1,
@@ -151,7 +173,7 @@ class ArtForce(MetaEnv):
                 -1,
                 self.p.JOINT_FIXED,
                 [0,0,1],
-                np.array([w*(1 if i > 1 else -1), l*(1 if i % 2 else -1),  0.02]),
+                offset,
                 [0,0,0],
                 # childFrameOrientation=[0,0,math.pi/2]
             )
@@ -164,11 +186,57 @@ class ArtForce(MetaEnv):
             f"gripper/wsg50_one_motor_gripper.sdf", 
             # basePosition=bottom_link_pos+np.array([w*(1 if i > 1 else -1), l*(1 if i % 2 else -1), -0.02]),
             # baseOrientation=self.p.getQuaternionFromEuler([0, 0, -math.pi]),
-            # globalScaling=0.02,
+            globalScaling=0.5,
             # useFixedBase=True,
             # flags=0
         )[0]
 
+    def _get_axis_pose(self):
+        object_pose = self.p.getBasePositionAndOrientation(self.obj_id) # [pos, orientation(quat)]
+        # debug_axis = DebugAxes(self.p)
+        # debug_axis.update(object_pose[0], object_pose[1])
+        offset = np.array([self.obj_w/2, -self.left_flag * self.obj_l/2, 0])
+        offset_world = R.from_quat(object_pose[1]).as_matrix() @ offset
+        axis_pos = np.array(object_pose[0]) + offset_world
+        
+        joint_info = self.p.getJointState(self.obj_id, self.axis_index[0])
+        object_ori_euler = np.array(self.p.getEulerFromQuaternion(object_pose[1]))        
+        axis_angle = np.array(joint_info[0]) # rotate at axis z
+        axis_ori = object_ori_euler.copy()
+        axis_ori[2] += (self.left_flag * math.pi/2 - math.pi/2 + axis_angle)
+
+        axis_pose = np.eye(4)
+        axis_pose[:3,3] = axis_pos
+        axis_pose[:3,:3] = R.from_euler('xyz', axis_ori).as_matrix()
+
+        # debug_axis = DebugAxes(self.p)
+        # debug_axis.update(H=axis_pose)
+
+        return axis_pose
+
+class DebugAxes(object):
+    """
+    可视化某个局部坐标系, 红色x轴, 绿色y轴, 蓝色z轴
+    """
+    def __init__(self, client):
+        self.uids = [-1, -1, -1]
+        self.p = client
+
+    def update(self, pos=[0,0,0], orn=[0,0,0,1], H=None):
+        """
+        Arguments:
+        - pos: len=3, position in world frame
+        - orn: len=4, quaternion (x, y, z, w), world frame
+        """
+        pos = np.asarray(pos)
+        rot3x3 = R.from_quat(orn).as_matrix()
+        if H is not None:
+            pos = H[:3, 3]
+            rot3x3=H[:3,:3]
+        axis_x, axis_y, axis_z = rot3x3.T
+        self.uids[0] = self.p.addUserDebugLine(pos, pos + axis_x * 0.5, [1, 0, 0], 10, replaceItemUniqueId=self.uids[0])
+        self.uids[1] = self.p.addUserDebugLine(pos, pos + axis_y * 0.5, [0, 1, 0], 10, replaceItemUniqueId=self.uids[1])
+        self.uids[2] = self.p.addUserDebugLine(pos, pos + axis_z * 0.5, [0, 0, 1], 10, replaceItemUniqueId=self.uids[2])
 
 # if __name__ == '__main__':
 #     env = ArtForce()
