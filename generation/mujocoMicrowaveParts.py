@@ -37,7 +37,7 @@ def sample_handle(side_height):
 def const_handle(side_height):
     HANDLE_LEN = 0.01
     HANDLE_WIDTH = 0.01
-    HANDLE_HEIGHT = side_height
+    HANDLE_HEIGHT = side_height*0.7
     return HANDLE_LEN, HANDLE_WIDTH, HANDLE_HEIGHT
 
 def build_microwave(length, width, height, thicc, left, set_pose=None, set_rot=None):

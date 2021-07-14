@@ -5,6 +5,9 @@ import peg_in_hole_gym
 from peg_in_hole_gym.envs.base_env import TASK_LIST
 from env import ArtForce
 
+from icecream import install
+install()
+
 TASK_LIST['art-force'] = ArtForce
 
 object_list = ["microwave", "toaster", "drawer", "cabinet", "cabinet2", "refrigerator"]

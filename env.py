@@ -59,21 +59,35 @@ class ArtForce(MetaEnv):
         axis_pose = self._get_axis_pose()
 
         # get door pose
-        door_pos_axis = np.array([0,self.obj_l*self.radius_flag,0,1])
+        door_pos_axis = np.array([0,self.obj_l*self.radius_flag + 0.04,self.obj_h-self.obj_t/2,1])
         door_pos_world = (axis_pose @ door_pos_axis)[:3]
+        R_ae = np.array([
+            [1, 0, 0],
+            [0, 0,-1],
+            [0, 1, 0]
+        ])
+        door_ori_world = R.from_matrix(axis_pose[:3, :3] @ R_ae).as_quat()
 
-        # self.p.resetBasePositionAndOrientation(self.gripper_id, door_pos_world, [0,0,0,1])
-        # debug_axis = DebugAxes(self.p)
-        # debug_axis.update(door_pos_world)
+        # reset gripper pose and openning degree
+        self.p.resetBasePositionAndOrientation(self.gripper_id, door_pos_world, door_ori_world)
+        self.p.setJointMotorControlArray(self.gripper_id, [2,5], self.p.POSITION_CONTROL, [0.4, -0.4])
+        # self.p.resetJointState(self.gripper_id, 2, 0.4)
+        # # self.p.resetJointState(self.gripper_id, 7, 3)
+        # self.p.resetJointState(self.gripper_id, 5, -0.4)
+
 
         
 
     def apply_action(self, action):
+        
         # joint_num = self.p.getNumJoints(self.obj_id)
         # for i in range(joint_num):
         #     joint_info =  self.p.getJointState(self.obj_id, i)
         #     print("[*] Joint info:", i, joint_info)
-
+        # joint_num = self.p.getNumJoints(self.gripper_id)
+        # for i in range(joint_num):
+        #     joint_info =  self.p.getJointState(self.gripper_id, i)
+        #     print("[*] Joint info:", i, joint_info)
         # make virtual end go arc
 
         # just test
@@ -129,22 +143,25 @@ class ArtForce(MetaEnv):
         # get object's l&w
         joint_num = self.p.getNumJoints(self.obj_id)
         bottom_link_pos, bottom_link_ori = [np.array(i) for i in self.p.getBasePositionAndOrientation(self.obj_id)]
-        l, w = -1,-1
+        l, w, h, t = -1, -1, -1, -1
         axis_index = []
         for i in range(joint_num):
             joint_info =  self.p.getJointInfo(self.obj_id, i)
             # print("[*] Joint info:", joint_info)
             if joint_info[12] == b'cabinet_left':
                 l = abs(joint_info[14][1]) * 2
+                h = abs(joint_info[14][2]) * 2
             elif joint_info[12] == b'cabinet_back':
                 w = abs(joint_info[14][0]) * 2
+            elif joint_info[12] == b'cabinet_keypad':
+                t = abs(joint_info[14][0]) * 2
             elif joint_info[1] == b'bottom_left_hinge':
                 axis_index.append(i)
             elif self.obj in ["cabinet2", "refrigerator"] and joint_info[1] == b'bottom_right_hinge':
                 axis_index.append(i)
-        assert l!=-1 and w!=-1, "[x] Cannot find object h/w!"
-        print(f"[~] object's l: {l}, w: {w}")
-        self.obj_l, self.obj_w = l, w
+        assert l!=-1 and w!=-1 and h!=-1 and t!=-1, "[x] Cannot find object l/w/h/t!"
+        print(f"[~] object's l: {l}, w: {w}, h:{h}, t:{t}")
+        self.obj_l, self.obj_w, self.obj_h, self.obj_t = l, w, h, t
         assert axis_index, "[x] Cannot find any axis!"
         print(f"[~] axis_index: {axis_index}")
         self.axis_index = axis_index
@@ -186,7 +203,7 @@ class ArtForce(MetaEnv):
             f"gripper/wsg50_one_motor_gripper.sdf", 
             # basePosition=bottom_link_pos+np.array([w*(1 if i > 1 else -1), l*(1 if i % 2 else -1), -0.02]),
             # baseOrientation=self.p.getQuaternionFromEuler([0, 0, -math.pi]),
-            globalScaling=0.5,
+            globalScaling=0.3,
             # useFixedBase=True,
             # flags=0
         )[0]
@@ -195,7 +212,7 @@ class ArtForce(MetaEnv):
         object_pose = self.p.getBasePositionAndOrientation(self.obj_id) # [pos, orientation(quat)]
         # debug_axis = DebugAxes(self.p)
         # debug_axis.update(object_pose[0], object_pose[1])
-        offset = np.array([self.obj_w/2, -self.left_flag * self.obj_l/2, 0])
+        offset = np.array([self.obj_w/2 + self.obj_t/2, -self.left_flag * self.obj_l/2 - self.obj_t/2, 0])
         offset_world = R.from_quat(object_pose[1]).as_matrix() @ offset
         axis_pos = np.array(object_pose[0]) + offset_world
         
