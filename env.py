@@ -39,11 +39,11 @@ class ArtForce(MetaEnv):
         # add gripper
         self._add_gripper()
         # # test
-        # print(f"[*] TEST FOR GRIPPER")
-        # joint_num = self.p.getNumJoints(self.gripper_id)
-        # for i in range(joint_num):
-        #     joint_info =  self.p.getJointInfo(self.gripper_id, i)
-        #     print("[*] Joint info:", joint_info)
+        print(f"[*] TEST FOR GRIPPER")
+        joint_num = self.p.getNumJoints(self.gripper_id)
+        for i in range(joint_num):
+            joint_info =  self.p.getJointInfo(self.gripper_id, i)
+            print("[*] Joint info:", joint_info)
 
     
     def _reset_internals(self):
@@ -56,22 +56,34 @@ class ArtForce(MetaEnv):
 
         # reset virtual tcp pose
         # get axis's pose
+        '''
+            axis_pose: real axis pose for gripper attaching to the door
+            init_axis_pose: pre axis pose from model for gripper going arc
+        '''
         axis_pose = self._get_axis_pose()
+        self.init_axis_pose = self._get_pre_axis_pose()
+        debug_axis = DebugAxes(self.p)
+        debug_axis.update(H=axis_pose)
 
         # get door pose
-        door_pos_axis = np.array([0,self.obj_l*self.radius_flag + 0.04,self.obj_h-self.obj_t/2,1])
+        self.door_radius = self.obj_l*self.radius_flag + 0.04
+        door_pos_axis = np.array([0,self.door_radius,self.obj_h-self.obj_t/2,1])
         door_pos_world = (axis_pose @ door_pos_axis)[:3]
-        R_ae = np.array([
-            [1, 0, 0],
-            [0, 0,-1],
-            [0, 1, 0]
-        ])
-        door_ori_world = R.from_matrix(axis_pose[:3, :3] @ R_ae).as_quat()
+        # R_ae = np.array([
+        #     [1, 0, 0],
+        #     [0, 1, 0],
+        #     [0, 0, 1]
+        # ])
+        door_ori_world = R.from_matrix(axis_pose[:3, :3] @ self.R_ae).as_quat()
+        debug_axis = DebugAxes(self.p)
+        debug_axis.update(door_pos_world, door_ori_world)
 
         # reset gripper pose and openning degree
         self.p.resetBasePositionAndOrientation(self.gripper_id, door_pos_world, door_ori_world)
-        self.p.setJointMotorControlArray(self.gripper_id, [2,5], self.p.POSITION_CONTROL, [0.4, -0.4])
-        # self.p.resetJointState(self.gripper_id, 2, 0.4)
+        self.p.setJointMotorControlArray(self.gripper_id, [0,1], self.p.POSITION_CONTROL, [self.obj_t/2, self.obj_t/2], forces=[0.1,0.1]) # 
+        # self.p.resetJointState(self.gripper_id, 0, 0.02)
+        # self.p.resetJointState(self.gripper_id, 1, 0.02)
+
         # # self.p.resetJointState(self.gripper_id, 7, 3)
         # self.p.resetJointState(self.gripper_id, 5, -0.4)
 
@@ -88,11 +100,28 @@ class ArtForce(MetaEnv):
         # for i in range(joint_num):
         #     joint_info =  self.p.getJointState(self.gripper_id, i)
         #     print("[*] Joint info:", i, joint_info)
+        
         # make virtual end go arc
+        # assume door vel
+        door_omega_axis = np.array([0,0,-0.05])
+        door_pos_world = list(self.p.getBasePositionAndOrientation(self.gripper_id)[0])
+        # ic(type(door_pos_world))
+        door_rotate_r_axis = (np.linalg.inv(self.init_axis_pose) @ (door_pos_world+[1]))[:3] # np.array([0,1,0])
+        door_vel_axis = np.cross(door_omega_axis, door_rotate_r_axis)
+        
+        
+        R_wa = self.init_axis_pose[:3, :3]
+        end_vel_world = 0 + R_wa @ door_vel_axis + 0
+        # ic(end_vel_world)
+
+        end_omega_world = R_wa @ door_omega_axis
+
+        self.p.resetBaseVelocity(self.gripper_id, end_vel_world, end_omega_world)
+
 
         # just test
         # self.p.resetBaseVelocity(self.gripper_id, [0.1,0.1,0.1])
-        pass
+
     
     def get_info(self):
         # get the prediction of the axis's pose
@@ -198,15 +227,26 @@ class ArtForce(MetaEnv):
         print("[~] Constraint established.")  
 
     def _add_gripper(self):
-        self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
-        self.gripper_id = self.p.loadSDF(
-            f"gripper/wsg50_one_motor_gripper.sdf", 
-            # basePosition=bottom_link_pos+np.array([w*(1 if i > 1 else -1), l*(1 if i % 2 else -1), -0.02]),
-            # baseOrientation=self.p.getQuaternionFromEuler([0, 0, -math.pi]),
-            globalScaling=0.3,
-            # useFixedBase=True,
-            # flags=0
-        )[0]
+        # self.p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        # self.gripper_id = self.p.loadSDF(
+        #     f"gripper/wsg50_one_motor_gripper.sdf", 
+        #     # basePosition=bottom_link_pos+np.array([w*(1 if i > 1 else -1), l*(1 if i % 2 else -1), -0.02]),
+        #     # baseOrientation=self.p.getQuaternionFromEuler([0, 0, -math.pi]),
+        #     globalScaling=0.3,
+        #     # useFixedBase=True,
+        #     # flags=0
+        # )[0]
+        self.gripper_id = self.p.loadURDF(
+            "assets/panda.urdf",
+            useFixedBase=True,
+            globalScaling=0.5,
+        )
+
+        self.R_ae = np.array([
+            [0,-1, 0],
+            [0, 0,-1],
+            [1, 0, 0]
+        ])
 
     def _get_axis_pose(self):
         object_pose = self.p.getBasePositionAndOrientation(self.obj_id) # [pos, orientation(quat)]
@@ -230,6 +270,11 @@ class ArtForce(MetaEnv):
         # debug_axis.update(H=axis_pose)
 
         return axis_pose
+
+    def _get_pre_axis_pose(self):
+        # TO DO
+        return self._get_axis_pose()
+
 
 class DebugAxes(object):
     """

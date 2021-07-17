@@ -17,4 +17,4 @@ if __name__ == '__main__':
     env.reset()
     while True:
         env.step([[1]])
-        time.sleep(0.1)
+        time.sleep(0.01)
