@@ -136,5 +136,4 @@ normal_texture.png
 gaussian_noise.png
 
 # auto_gen assets
-assets/*
-!/assets/.keep
+*.xml

@@ -44,6 +44,9 @@ class ArtForce(MetaEnv):
         for i in range(joint_num):
             joint_info =  self.p.getJointInfo(self.gripper_id, i)
             print("[*] Joint info:", joint_info)
+        # self.p.enableJointForceTorqueSensor(self.gripper_id, 0, 1)
+        # self.p.enableJointForceTorqueSensor(self.gripper_id, 1, 1)
+        # self.p.enableJointForceTorqueSensor(self.gripper_id, 2, 1)
 
     
     def _reset_internals(self):
@@ -66,7 +69,7 @@ class ArtForce(MetaEnv):
         debug_axis.update(H=axis_pose)
 
         # get door pose
-        self.door_radius = self.obj_l*self.radius_flag + 0.04
+        self.door_radius = self.obj_l*self.radius_flag + 0.05
         door_pos_axis = np.array([0,self.door_radius,self.obj_h-self.obj_t/2,1])
         door_pos_world = (axis_pose @ door_pos_axis)[:3]
         # R_ae = np.array([
@@ -80,7 +83,9 @@ class ArtForce(MetaEnv):
 
         # reset gripper pose and openning degree
         self.p.resetBasePositionAndOrientation(self.gripper_id, door_pos_world, door_ori_world)
-        self.p.setJointMotorControlArray(self.gripper_id, [0,1], self.p.POSITION_CONTROL, [self.obj_t/2, self.obj_t/2], forces=[0.1,0.1]) # 
+        self.p.setJointMotorControlArray(self.gripper_id, [1,2], self.p.POSITION_CONTROL, [self.obj_t/2, self.obj_t/2], forces=[10000,10000]) # 
+        # self.p.setJointMotorControlArray(self.gripper_id, [0,1], self.p.VELOCITY_CONTROL, [1,1], forces=[10000,10000]) # 
+
         # self.p.resetJointState(self.gripper_id, 0, 0.02)
         # self.p.resetJointState(self.gripper_id, 1, 0.02)
 
@@ -118,12 +123,17 @@ class ArtForce(MetaEnv):
 
         self.p.resetBaseVelocity(self.gripper_id, end_vel_world, end_omega_world)
 
-
         # just test
         # self.p.resetBaseVelocity(self.gripper_id, [0.1,0.1,0.1])
 
     
     def get_info(self):
+        force_info = self.p.getJointState(self.gripper_id, self.gripper_force_sensor_id)[2]
+        # ic(force_info)
+        # ic(self.p.getJointState(self.gripper_id, 0)[2])
+        # ic(self.p.getJointState(self.gripper_id, 1)[2])
+        # ic(self.p.getJointState(self.gripper_id, 2)[2])
+
         # get the prediction of the axis's pose
         return [], 0, False, []
 
@@ -247,6 +257,8 @@ class ArtForce(MetaEnv):
             [0, 0,-1],
             [1, 0, 0]
         ])
+        self.gripper_force_sensor_id = 0
+        self.p.enableJointForceTorqueSensor(self.gripper_id, self.gripper_force_sensor_id, 1)
 
     def _get_axis_pose(self):
         object_pose = self.p.getBasePositionAndOrientation(self.obj_id) # [pos, orientation(quat)]
