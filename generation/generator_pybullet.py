@@ -60,7 +60,7 @@ class SceneGenerator():
 
         # pb_client = pb.connect(pb.GUI)
         self.pb_client = pb_client
-        self.pb_client.setGravity(0,0,-9.8)
+        # self.pb_client.setGravity(0,0,-9.8)
 
         # Camera external settings
         self.viewMatrix = pb.computeViewMatrix(

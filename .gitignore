@@ -129,7 +129,8 @@ dmypy.json
 .pyre/
 
 # test
-test/
+test*
+assets/cube.obj
 
 # random texture
 normal_texture.png

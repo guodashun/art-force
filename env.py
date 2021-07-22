@@ -12,6 +12,8 @@ from peg_in_hole_gym.envs.meta_env import MetaEnv
 
 from generation.generator_pybullet import SceneGenerator
 
+from force_vis import ForceVis
+
 class ArtForce(MetaEnv):
     # action_space=spaces.Box(np.array([-0.8,0,0,-math.pi,-math.pi,-math.pi]),np.array([0.8,0.8,0.8,math.pi,math.pi,math.pi]))
     # observation_space = spaces.Box(np.array([0,0,0,-math.pi/3*2]), np.array([1,1,1,0]))
@@ -24,6 +26,8 @@ class ArtForce(MetaEnv):
         
         self.left_flag = -1 if self.obj == "refrigerator" else 1
         self.radius_flag = 3/4 if self.obj == "microwave" else 1
+
+        self.force_vis = ForceVis(online=False)
         
         super().__init__(client, offset)
 
@@ -39,11 +43,11 @@ class ArtForce(MetaEnv):
         # add gripper
         self._add_gripper()
         # # test
-        print(f"[*] TEST FOR GRIPPER")
-        joint_num = self.p.getNumJoints(self.gripper_id)
-        for i in range(joint_num):
-            joint_info =  self.p.getJointInfo(self.gripper_id, i)
-            print("[*] Joint info:", joint_info)
+        # print(f"[*] TEST FOR GRIPPER")
+        # joint_num = self.p.getNumJoints(self.gripper_id)
+        # for i in range(joint_num):
+        #     joint_info =  self.p.getJointInfo(self.gripper_id, i)
+        #     print("[*] Joint info:", joint_info)
         # self.p.enableJointForceTorqueSensor(self.gripper_id, 0, 1)
         # self.p.enableJointForceTorqueSensor(self.gripper_id, 1, 1)
         # self.p.enableJointForceTorqueSensor(self.gripper_id, 2, 1)
@@ -53,7 +57,7 @@ class ArtForce(MetaEnv):
         
         # reset(random) articulated object pose
         for i in self.axis_index:
-            angle = self.left_flag * (random.random()*(-math.pi/18) - math.pi/18)
+            angle = self.left_flag * (random.random()*(-math.pi/18) - math.pi/12)
             self.p.resetJointState(self.obj_id, i, angle)
             print(f"[~] axis {i} has been reset")
 
@@ -83,8 +87,10 @@ class ArtForce(MetaEnv):
 
         # reset gripper pose and openning degree
         self.p.resetBasePositionAndOrientation(self.gripper_id, door_pos_world, door_ori_world)
-        self.p.setJointMotorControlArray(self.gripper_id, [1,2], self.p.POSITION_CONTROL, [self.obj_t/2, self.obj_t/2], forces=[10000,10000]) # 
-        # self.p.setJointMotorControlArray(self.gripper_id, [0,1], self.p.VELOCITY_CONTROL, [1,1], forces=[10000,10000]) # 
+        # self.p.resetJointState(self.gripper_id, 1, self.obj_t/2+0.001)
+        # self.p.resetJointState(self.gripper_id, 2, self.obj_t/2+0.001)
+        self.p.setJointMotorControlArray(self.gripper_id, [1,2], self.p.POSITION_CONTROL, [self.obj_t/2+0.001, self.obj_t/2+0.001], forces=[10000,10000]) # 
+        # self.p.setJointMotorControlArray(self.gripper_id, [1,2], self.p.VELOCITY_CONTROL, targetVelocities=[-1,-1], forces=[1,1]) # 
 
         # self.p.resetJointState(self.gripper_id, 0, 0.02)
         # self.p.resetJointState(self.gripper_id, 1, 0.02)
@@ -92,8 +98,25 @@ class ArtForce(MetaEnv):
         # # self.p.resetJointState(self.gripper_id, 7, 3)
         # self.p.resetJointState(self.gripper_id, 5, -0.4)
 
+        # reset joint damping
+        joint_num = self.p.getNumJoints(self.obj_id)
+        for i in range(joint_num):
+            self.p.changeDynamics(
+                self.obj_id, 
+                i, 
+                # jointDamping=1,
+                # linearDamping=0,
+                # angularDamping=0,
+                # contactStiffness=1000,
+                # contactDamping=1000,
+                # frictionAnchor=1,
+                # contactProcessingThreshold=0,
+                # lateralFriction=1000, # valid
+                # spinningFriction=1000,
+            )
+        # self.p.changeDynamics(self.obj_id, self.axis_index[0]+1, jointDamping=0.0001,linearDamping=0,angularDamping=0)
+        # self.p.changeDynamics(self.obj_id, self.axis_index[0]-1, jointDamping=0.0001,linearDamping=0,angularDamping=0)
 
-        
 
     def apply_action(self, action):
         
@@ -108,7 +131,7 @@ class ArtForce(MetaEnv):
         
         # make virtual end go arc
         # assume door vel
-        door_omega_axis = np.array([0,0,-0.05])
+        door_omega_axis = np.array([0,0,-0.01])
         door_pos_world = list(self.p.getBasePositionAndOrientation(self.gripper_id)[0])
         # ic(type(door_pos_world))
         door_rotate_r_axis = (np.linalg.inv(self.init_axis_pose) @ (door_pos_world+[1]))[:3] # np.array([0,1,0])
@@ -123,13 +146,17 @@ class ArtForce(MetaEnv):
 
         self.p.resetBaseVelocity(self.gripper_id, end_vel_world, end_omega_world)
 
-        # just test
-        # self.p.resetBaseVelocity(self.gripper_id, [0.1,0.1,0.1])
+        # self.p.setJointMotorControlArray(self.gripper_id, [1,2], self.p.VELOCITY_CONTROL, [1,1], forces=[10000,10000]) 
+        # self.p.setJointMotorControlArray(self.gripper_id, [1,2], self.p.VELOCITY_CONTROL, targetVelocities=[-1,-1], forces=[100,100])
+        # self.p.setJointMotorControlArray(self.gripper_id, [1,2], self.p.POSITION_CONTROL, [self.obj_t/2+0.001, self.obj_t/2+0.001], forces=[10000,10000])
 
     
     def get_info(self):
         force_info = self.p.getJointState(self.gripper_id, self.gripper_force_sensor_id)[2]
-        # ic(force_info)
+        ic(force_info)
+        self.force_vis.update(force_info)
+        # self.force_vis.show()
+        # ic(self.p.getJointInfo(self.obj_id, self.axis_index[0]))
         # ic(self.p.getJointState(self.gripper_id, 0)[2])
         # ic(self.p.getJointState(self.gripper_id, 1)[2])
         # ic(self.p.getJointState(self.gripper_id, 2)[2])
@@ -287,10 +314,13 @@ class ArtForce(MetaEnv):
         # TO DO
         return self._get_axis_pose()
 
+    def render(self, mode='rgb_array'):
+        self.force_vis.show()
+
 
 class DebugAxes(object):
     """
-    可视化某个局部坐标系, 红色x轴, 绿色y轴, 蓝色z轴
+    Visualize the specific coordinate system with RGB representing the XYZ-axis respectively
     """
     def __init__(self, client):
         self.uids = [-1, -1, -1]
@@ -312,7 +342,3 @@ class DebugAxes(object):
         self.uids[1] = self.p.addUserDebugLine(pos, pos + axis_y * 0.5, [0, 1, 0], 10, replaceItemUniqueId=self.uids[1])
         self.uids[2] = self.p.addUserDebugLine(pos, pos + axis_z * 0.5, [0, 0, 1], 10, replaceItemUniqueId=self.uids[2])
 
-# if __name__ == '__main__':
-#     env = ArtForce()
-
-    
